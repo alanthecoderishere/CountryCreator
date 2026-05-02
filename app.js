@@ -266,7 +266,14 @@ function render() {
         ctx.shadowColor = "black";
         ctx.fillStyle = 'white';
         ctx.font = 'bold 14px Inter';
-        const label = c.category === "International" ? `${c.rank} ${c.name}` : `${c.rank === 'King' ? 'Kingdom' : c.rank} of ${c.name}`;
+        let label;
+        if (c.category === "International") {
+            label = `${c.rank} ${c.name}`;
+        } else if (c.category === "Republic") {
+            label = `Republic of ${c.name}`;
+        } else {
+            label = `${c.rank === 'King' ? 'Kingdom' : c.rank} of ${c.name}`;
+        }
         ctx.textAlign = 'center';
         ctx.fillText(label, centerScreen.x, centerScreen.y);
         ctx.shadowBlur = 0;
