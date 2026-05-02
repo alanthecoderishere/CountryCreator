@@ -23,6 +23,18 @@ const govData = {
     "International": ["International"]
 };
 
+// --- SCREENSHOT LOGIC ---
+document.getElementById('screenshotBtn').onclick = () => {
+    // Create download link
+    const link = document.createElement('a');
+    link.download = `GeoSandbox_Map_${new Date().getTime()}.png`;
+    link.href = canvas.toDataURL("image/png");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+// --- EXPORT / IMPORT ---
 // --- Sync System ---
 function screenToMap(x, y) {
     return {
