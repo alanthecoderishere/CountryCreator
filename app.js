@@ -10,6 +10,12 @@ let countries = JSON.parse(localStorage.getItem('savedCountries')) || [];
 let currentPoints = [];
 let mousePos = { x: 0, y: 0 };
 
+// --- Transformation State (Zoom & Pan) ---
+let zoom = 1.0;
+let offset = { x: 0, y: 0 };
+let isPanning = false;
+let startPan = { x: 0, y: 0 };
+
 const govData = {
     "Monarchy / Empire": ["Emperor", "King", "Sultan", "Emir"],
     "Republic": ["President"],
@@ -17,26 +23,18 @@ const govData = {
     "International": ["International"]
 };
 
-// --- Coordinate Scaling (Sync Fix) ---
+// --- Coordinate Scaling (Sync Fix with Zoom & Pan) ---
 function screenToMap(x, y) {
-    if (!backgroundImage.complete) return { x, y };
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = backgroundImage.width / rect.width;
-    const scaleY = backgroundImage.height / rect.height;
     return {
-        x: (x - rect.left) * scaleX,
-        y: (y - rect.top) * scaleY
+        x: (x - offset.x) / zoom,
+        y: (y - offset.y) / zoom
     };
 }
 
 function mapToScreen(x, y) {
-    if (!backgroundImage.complete) return { x, y };
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = rect.width / backgroundImage.width;
-    const scaleY = rect.height / backgroundImage.height;
     return {
-        x: rect.left + (x * scaleX),
-        y: rect.top + (y * scaleY)
+        x: x * zoom + offset.x,
+        y: y * zoom + offset.y
     };
 }
 
@@ -45,8 +43,19 @@ window.onload = () => {
     resize();
     populateSelects();
     updateCountryList();
+    
+    // Center map on start
+    backgroundImage.onload = () => {
+        centerMap();
+    };
     render();
 };
+
+function centerMap() {
+    zoom = Math.min(canvas.width / backgroundImage.width, canvas.height / backgroundImage.height) * 0.9;
+    offset.x = (canvas.width - backgroundImage.width * zoom) / 2;
+    offset.y = (canvas.height - backgroundImage.height * zoom) / 2;
+}
 
 function populateSelects() {
     const catSelect = document.getElementById('govCategory');
@@ -74,13 +83,20 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-// Input Handling
+// --- Input Handling ---
 const mobileControls = document.getElementById('mobileControls');
 const mobileCreateBtn = document.getElementById('mobileCreateBtn');
 const undoBtn = document.getElementById('undoBtn');
 const clearBtn = document.getElementById('clearBtn');
 
 canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 1 || (e.button === 0 && e.altKey)) { // Middle Click or Alt + Left Click to PAN
+        isPanning = true;
+        startPan = { x: e.clientX - offset.x, y: e.clientY - offset.y };
+        canvas.style.cursor = 'grabbing';
+        return;
+    }
+
     if (e.button === 0) { // Left Click / Touch
         const mapPoint = screenToMap(e.clientX, e.clientY);
         currentPoints.push(mapPoint);
@@ -89,6 +105,36 @@ canvas.addEventListener('mousedown', (e) => {
         handleFinish();
     }
 });
+
+canvas.addEventListener('mousemove', (e) => {
+    if (isPanning) {
+        offset.x = e.clientX - startPan.x;
+        offset.y = e.clientY - startPan.y;
+    } else {
+        mousePos = screenToMap(e.clientX, e.clientY);
+    }
+});
+
+window.addEventListener('mouseup', () => {
+    isPanning = false;
+    canvas.style.cursor = 'crosshair';
+});
+
+// Zoom Logic
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomSpeed = 0.1;
+    const oldZoom = zoom;
+    
+    // Zoom in or out
+    if (e.deltaY < 0) zoom *= (1 + zoomSpeed);
+    else zoom /= (1 + zoomSpeed);
+    
+    // Keep zoom focused on mouse position
+    const mouseMap = screenToMap(e.clientX, e.clientY);
+    offset.x = e.clientX - mouseMap.x * zoom;
+    offset.y = e.clientY - mouseMap.y * zoom;
+}, { passive: false });
 
 undoBtn.onclick = () => {
     currentPoints.pop();
@@ -111,15 +157,13 @@ function handleFinish() {
 }
 
 function updateMobileBtn() {
-    mobileControls.style.display = currentPoints.length > 0 ? 'flex' : 'none';
-    mobileCreateBtn.style.visibility = currentPoints.length >= 3 ? 'visible' : 'hidden';
+    if (mobileControls) {
+        mobileControls.style.display = currentPoints.length > 0 ? 'flex' : 'none';
+        mobileCreateBtn.style.visibility = currentPoints.length >= 3 ? 'visible' : 'hidden';
+    }
 }
 
 mobileCreateBtn.onclick = handleFinish;
-
-canvas.addEventListener('mousemove', (e) => {
-    mousePos = screenToMap(e.clientX, e.clientY);
-});
 
 window.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -158,66 +202,85 @@ function saveData() {
 
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    ctx.translate(offset.x, offset.y);
+    ctx.scale(zoom, zoom);
+
+    // Draw Background at original size (scaling handled by ctx.scale)
     if (backgroundImage.complete) {
-        ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(backgroundImage, 0, 0);
+    } else {
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, 0, 2000, 1000); // Dummy size
     }
 
+    // Draw ALL Saved Countries
     countries.forEach(c => {
+        if (!c.points || c.points.length < 3) return;
         ctx.beginPath();
-        const start = mapToScreen(c.points[0].x, c.points[0].y);
-        ctx.moveTo(start.x, start.y);
-        c.points.forEach(p => {
-            const pos = mapToScreen(p.x, p.y);
-            ctx.lineTo(pos.x, pos.y);
-        });
+        ctx.moveTo(c.points[0].x, c.points[0].y);
+        c.points.forEach(p => ctx.lineTo(p.x, p.y));
         ctx.closePath();
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+        
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
         ctx.fill();
         ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 / zoom; // Maintain consistent line thickness regardless of zoom
         ctx.stroke();
 
+        // Label (Draw outside scale for sharp text)
+    });
+    
+    ctx.restore();
+
+    // Draw Labels separately to keep them sharp and at fixed size
+    countries.forEach(c => {
+        const centerMap = getCenter(c.points);
+        const centerScreen = mapToScreen(centerMap.x, centerMap.y);
+        
         ctx.shadowBlur = 4;
         ctx.shadowColor = "black";
         ctx.fillStyle = 'white';
         ctx.font = 'bold 14px Inter';
-        let label = c.category === "International" ? `${c.rank} ${c.name}` : `${c.rank === 'King' ? 'Kingdom' : c.rank} of ${c.name}`;
-        const screenPoints = c.points.map(p => mapToScreen(p.x, p.y));
-        let center = getCenter(screenPoints);
+        const label = c.category === "International" ? `${c.rank} ${c.name}` : `${c.rank === 'King' ? 'Kingdom' : c.rank} of ${c.name}`;
         ctx.textAlign = 'center';
-        ctx.fillText(label, center.x, center.y);
+        ctx.fillText(label, centerScreen.x, centerScreen.y);
         ctx.shadowBlur = 0;
     });
 
+    // Draw Current Progress
     if (currentPoints.length > 0) {
+        ctx.save();
+        ctx.translate(offset.x, offset.y);
+        ctx.scale(zoom, zoom);
+
         ctx.beginPath();
-        const start = mapToScreen(currentPoints[0].x, currentPoints[0].y);
-        ctx.moveTo(start.x, start.y);
-        currentPoints.forEach(p => {
-            const pos = mapToScreen(p.x, p.y);
-            ctx.lineTo(pos.x, pos.y);
-        });
-        const mPos = mapToScreen(mousePos.x, mousePos.y);
-        ctx.lineTo(mPos.x, mPos.y);
+        ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
+        currentPoints.forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.lineTo(mousePos.x, mousePos.y);
+        
         ctx.strokeStyle = '#38bdf8';
-        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 2 / zoom;
+        ctx.setLineDash([5 / zoom, 5 / zoom]);
         ctx.stroke();
         ctx.setLineDash([]);
 
         currentPoints.forEach(p => {
-            const pos = mapToScreen(p.x, p.y);
             ctx.fillStyle = '#808080';
             ctx.beginPath();
-            ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+            ctx.arc(p.x, p.y, 5 / zoom, 0, Math.PI * 2);
             ctx.fill();
             ctx.strokeStyle = 'white';
             ctx.stroke();
         });
+        ctx.restore();
     }
     requestAnimationFrame(render);
 }
 
 function getCenter(pts) {
+    if (pts.length === 0) return { x: 0, y: 0 };
     let x = pts.reduce((sum, p) => sum + p.x, 0) / pts.length;
     let y = pts.reduce((sum, p) => sum + p.y, 0) / pts.length;
     return { x, y };
@@ -225,10 +288,11 @@ function getCenter(pts) {
 
 function updateCountryList() {
     const list = document.querySelector('.list-container');
+    if (!list) return;
     list.innerHTML = countries.map((c, i) => `
         <div class="country-item">
             <div><span>${c.name}</span><br><small>${c.rank}</small></div>
-            <button onclick="deleteCountry(${i})" style="background:none; color:var(--danger); border:none; cursor:pointer;">Delete</button>
+            <button onclick="deleteCountry(${i})" class="action-btn-small danger" style="padding: 4px 8px; font-size: 0.7rem;">Delete</button>
         </div>
     `).join('');
 }
