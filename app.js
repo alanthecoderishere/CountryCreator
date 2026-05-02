@@ -23,7 +23,7 @@ const govData = {
     "International": ["International"]
 };
 
-// --- Coordinate Scaling (Sync Fix with Zoom & Pan) ---
+// --- Coordinate Scaling ---
 function screenToMap(x, y) {
     return {
         x: (x - offset.x) / zoom,
@@ -44,14 +44,17 @@ window.onload = () => {
     populateSelects();
     updateCountryList();
     
-    // Center map on start
-    backgroundImage.onload = () => {
+    // Ensure map is centered even if already loaded
+    if (backgroundImage.complete) {
         centerMap();
-    };
+    } else {
+        backgroundImage.onload = centerMap;
+    }
     render();
 };
 
 function centerMap() {
+    if (!backgroundImage.width) return;
     zoom = Math.min(canvas.width / backgroundImage.width, canvas.height / backgroundImage.height) * 0.9;
     offset.x = (canvas.width - backgroundImage.width * zoom) / 2;
     offset.y = (canvas.height - backgroundImage.height * zoom) / 2;
@@ -90,14 +93,16 @@ const undoBtn = document.getElementById('undoBtn');
 const clearBtn = document.getElementById('clearBtn');
 
 canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 1 || (e.button === 0 && e.altKey)) { // Middle Click or Alt + Left Click to PAN
+    // Middle click (1) or Alt+Left click (0) to Pan
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
         isPanning = true;
         startPan = { x: e.clientX - offset.x, y: e.clientY - offset.y };
         canvas.style.cursor = 'grabbing';
+        e.preventDefault();
         return;
     }
 
-    if (e.button === 0) { // Left Click / Touch
+    if (e.button === 0) { // Left Click
         const mapPoint = screenToMap(e.clientX, e.clientY);
         currentPoints.push(mapPoint);
         updateMobileBtn();
@@ -124,17 +129,61 @@ window.addEventListener('mouseup', () => {
 canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const zoomSpeed = 0.1;
-    const oldZoom = zoom;
+    const mouseBefore = screenToMap(e.clientX, e.clientY);
     
-    // Zoom in or out
     if (e.deltaY < 0) zoom *= (1 + zoomSpeed);
     else zoom /= (1 + zoomSpeed);
     
-    // Keep zoom focused on mouse position
-    const mouseMap = screenToMap(e.clientX, e.clientY);
-    offset.x = e.clientX - mouseMap.x * zoom;
-    offset.y = e.clientY - mouseMap.y * zoom;
+    // Re-adjust offset to zoom into mouse position
+    offset.x = e.clientX - mouseBefore.x * zoom;
+    offset.y = e.clientY - mouseBefore.y * zoom;
 }, { passive: false });
+
+// Mobile Touch Support (Panning with 2 fingers)
+let lastTouchDist = 0;
+canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+        isPanning = true;
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        lastTouchDist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+        startPan = { 
+            x: (touch1.clientX + touch2.clientX) / 2 - offset.x, 
+            y: (touch1.clientY + touch2.clientY) / 2 - offset.y 
+        };
+    } else if (e.touches.length === 1) {
+        // Single touch for drawing - optional logic here if needed
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && isPanning) {
+        e.preventDefault();
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        
+        // Panning
+        offset.x = (touch1.clientX + touch2.clientX) / 2 - startPan.x;
+        offset.y = (touch1.clientY + touch2.clientY) / 2 - startPan.y;
+        
+        // Pinch Zoom
+        const dist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+        const zoomFactor = dist / lastTouchDist;
+        const centerX = (touch1.clientX + touch2.clientX) / 2;
+        const centerY = (touch1.clientY + touch2.clientY) / 2;
+        const mapCenter = screenToMap(centerX, centerY);
+        
+        zoom *= zoomFactor;
+        lastTouchDist = dist;
+        
+        offset.x = centerX - mapCenter.x * zoom;
+        offset.y = centerY - mapCenter.y * zoom;
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => {
+    isPanning = false;
+});
 
 undoBtn.onclick = () => {
     currentPoints.pop();
@@ -207,38 +256,32 @@ function render() {
     ctx.translate(offset.x, offset.y);
     ctx.scale(zoom, zoom);
 
-    // Draw Background at original size (scaling handled by ctx.scale)
     if (backgroundImage.complete) {
         ctx.drawImage(backgroundImage, 0, 0);
     } else {
         ctx.fillStyle = '#1e293b';
-        ctx.fillRect(0, 0, 2000, 1000); // Dummy size
+        ctx.fillRect(0, 0, 2000, 1000);
     }
 
-    // Draw ALL Saved Countries
     countries.forEach(c => {
         if (!c.points || c.points.length < 3) return;
         ctx.beginPath();
         ctx.moveTo(c.points[0].x, c.points[0].y);
         c.points.forEach(p => ctx.lineTo(p.x, p.y));
         ctx.closePath();
-        
         ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
         ctx.fill();
         ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 2 / zoom; // Maintain consistent line thickness regardless of zoom
+        ctx.lineWidth = 2 / zoom;
         ctx.stroke();
-
-        // Label (Draw outside scale for sharp text)
     });
     
     ctx.restore();
 
-    // Draw Labels separately to keep them sharp and at fixed size
+    // Sharp Labels
     countries.forEach(c => {
         const centerMap = getCenter(c.points);
         const centerScreen = mapToScreen(centerMap.x, centerMap.y);
-        
         ctx.shadowBlur = 4;
         ctx.shadowColor = "black";
         ctx.fillStyle = 'white';
@@ -249,7 +292,7 @@ function render() {
         ctx.shadowBlur = 0;
     });
 
-    // Draw Current Progress
+    // Drawing Progress
     if (currentPoints.length > 0) {
         ctx.save();
         ctx.translate(offset.x, offset.y);
