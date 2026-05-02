@@ -4,7 +4,7 @@ const modal = document.getElementById('countryModal');
 const webhookUrl = "https://discord.com/api/webhooks/1499723920117465308/zQLQaFCN38t9H0F1o3N5A8Qk3VvekVB5ocxy7bk69_2--429ME78PQagIuQ2czMKUcTs";
 
 let backgroundImage = new Image();
-backgroundImage.src = 'Resources/Map.png'; // Path updated to match your folder structure
+backgroundImage.src = 'Resources/Map.png';
 
 let countries = JSON.parse(localStorage.getItem('savedCountries')) || [];
 let currentPoints = [];
@@ -17,6 +17,29 @@ const govData = {
     "International": ["International"]
 };
 
+// --- Coordinate Scaling (Sync Fix) ---
+function screenToMap(x, y) {
+    if (!backgroundImage.complete) return { x, y };
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = backgroundImage.width / rect.width;
+    const scaleY = backgroundImage.height / rect.height;
+    return {
+        x: (x - rect.left) * scaleX,
+        y: (y - rect.top) * scaleY
+    };
+}
+
+function mapToScreen(x, y) {
+    if (!backgroundImage.complete) return { x, y };
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / backgroundImage.width;
+    const scaleY = rect.height / backgroundImage.height;
+    return {
+        x: rect.left + (x * scaleX),
+        y: rect.top + (y * scaleY)
+    };
+}
+
 // Initialize
 window.onload = () => {
     resize();
@@ -28,13 +51,11 @@ window.onload = () => {
 function populateSelects() {
     const catSelect = document.getElementById('govCategory');
     const rankSelect = document.getElementById('leaderRank');
-    
     Object.keys(govData).forEach(cat => {
         let opt = document.createElement('option');
         opt.value = cat; opt.innerText = cat;
         catSelect.appendChild(opt);
     });
-
     const updateRanks = () => {
         rankSelect.innerHTML = '';
         govData[catSelect.value].forEach(rank => {
@@ -43,7 +64,6 @@ function populateSelects() {
             rankSelect.appendChild(opt);
         });
     };
-
     catSelect.onchange = updateRanks;
     updateRanks();
 }
@@ -52,20 +72,35 @@ function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 }
-
 window.addEventListener('resize', resize);
 
 // Input Handling
+const mobileControls = document.getElementById('mobileControls');
 const mobileCreateBtn = document.getElementById('mobileCreateBtn');
+const undoBtn = document.getElementById('undoBtn');
+const clearBtn = document.getElementById('clearBtn');
 
 canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0) { // Left Click / Touch
-        currentPoints.push({ x: e.clientX, y: e.clientY });
+        const mapPoint = screenToMap(e.clientX, e.clientY);
+        currentPoints.push(mapPoint);
         updateMobileBtn();
     } else if (e.button === 2) { // Right Click
         handleFinish();
     }
 });
+
+undoBtn.onclick = () => {
+    currentPoints.pop();
+    updateMobileBtn();
+};
+
+clearBtn.onclick = () => {
+    if (confirm("Clear current drawing?")) {
+        currentPoints = [];
+        updateMobileBtn();
+    }
+};
 
 function handleFinish() {
     if (currentPoints.length >= 3) {
@@ -76,13 +111,14 @@ function handleFinish() {
 }
 
 function updateMobileBtn() {
-    mobileCreateBtn.style.display = currentPoints.length >= 3 ? 'flex' : 'none';
+    mobileControls.style.display = currentPoints.length > 0 ? 'flex' : 'none';
+    mobileCreateBtn.style.visibility = currentPoints.length >= 3 ? 'visible' : 'hidden';
 }
 
 mobileCreateBtn.onclick = handleFinish;
 
 canvas.addEventListener('mousemove', (e) => {
-    mousePos = { x: e.clientX, y: e.clientY };
+    mousePos = screenToMap(e.clientX, e.clientY);
 });
 
 window.addEventListener('contextmenu', e => e.preventDefault());
@@ -91,13 +127,11 @@ document.getElementById('saveBtn').onclick = () => {
     const name = document.getElementById('countryName').value;
     const category = document.getElementById('govCategory').value;
     const rank = document.getElementById('leaderRank').value;
-
     if (!name) return alert("Enter country name!");
 
     const newCountry = { name, category, rank, points: [...currentPoints] };
     countries.push(newCountry);
     
-    // Webhook Notification
     fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,61 +158,62 @@ function saveData() {
 
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw Background
     if (backgroundImage.complete) {
         ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
     }
 
-    // Draw Saved Countries
     countries.forEach(c => {
         ctx.beginPath();
-        ctx.moveTo(c.points[0].x, c.points[0].y);
-        c.points.forEach(p => ctx.lineTo(p.x, p.y));
+        const start = mapToScreen(c.points[0].x, c.points[0].y);
+        ctx.moveTo(start.x, start.y);
+        c.points.forEach(p => {
+            const pos = mapToScreen(p.x, p.y);
+            ctx.lineTo(pos.x, pos.y);
+        });
         ctx.closePath();
-        
         ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
         ctx.fill();
         ctx.strokeStyle = '#38bdf8';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Label with shadow for readability
         ctx.shadowBlur = 4;
         ctx.shadowColor = "black";
         ctx.fillStyle = 'white';
         ctx.font = 'bold 14px Inter';
         let label = c.category === "International" ? `${c.rank} ${c.name}` : `${c.rank === 'King' ? 'Kingdom' : c.rank} of ${c.name}`;
-        let center = getCenter(c.points);
+        const screenPoints = c.points.map(p => mapToScreen(p.x, p.y));
+        let center = getCenter(screenPoints);
         ctx.textAlign = 'center';
         ctx.fillText(label, center.x, center.y);
         ctx.shadowBlur = 0;
     });
 
-    // Draw Current Progress
     if (currentPoints.length > 0) {
         ctx.beginPath();
-        ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
-        currentPoints.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.lineTo(mousePos.x, mousePos.y);
-        
+        const start = mapToScreen(currentPoints[0].x, currentPoints[0].y);
+        ctx.moveTo(start.x, start.y);
+        currentPoints.forEach(p => {
+            const pos = mapToScreen(p.x, p.y);
+            ctx.lineTo(pos.x, pos.y);
+        });
+        const mPos = mapToScreen(mousePos.x, mousePos.y);
+        ctx.lineTo(mPos.x, mPos.y);
         ctx.strokeStyle = '#38bdf8';
         ctx.setLineDash([5, 5]);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Points
         currentPoints.forEach(p => {
+            const pos = mapToScreen(p.x, p.y);
             ctx.fillStyle = '#808080';
             ctx.beginPath();
-            ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+            ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
             ctx.fill();
             ctx.strokeStyle = 'white';
-            ctx.lineWidth = 1.5;
             ctx.stroke();
         });
     }
-
     requestAnimationFrame(render);
 }
 
@@ -192,31 +227,25 @@ function updateCountryList() {
     const list = document.querySelector('.list-container');
     list.innerHTML = countries.map((c, i) => `
         <div class="country-item">
-            <div>
-                <span>${c.name}</span><br>
-                <small>${c.rank}</small>
-            </div>
-            <button onclick="deleteCountry(${i})" style="background:none; color:var(--danger); flex:none; padding:5px; font-size:0.7rem;">Delete</button>
+            <div><span>${c.name}</span><br><small>${c.rank}</small></div>
+            <button onclick="deleteCountry(${i})" style="background:none; color:var(--danger); border:none; cursor:pointer;">Delete</button>
         </div>
     `).join('');
 }
 
 window.deleteCountry = (index) => {
     if (confirm(`Delete ${countries[index].name}?`)) {
-        // Optional: Signal deletion via Webhook
         fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: `COUNTRY DEFEATED/DELETED: **${countries[index].name}** | Status: Fallen` })
         });
-
         countries.splice(index, 1);
         saveData();
         updateCountryList();
     }
 };
 
-// --- EXPORT / IMPORT ---
 document.getElementById('exportBtn').onclick = () => {
     if (countries.length === 0) return alert("No countries to export!");
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(countries, null, 2));
@@ -230,7 +259,6 @@ document.getElementById('exportBtn').onclick = () => {
 
 const fileInput = document.getElementById('fileInput');
 document.getElementById('importBtn').onclick = () => fileInput.click();
-
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -239,14 +267,13 @@ fileInput.onchange = (e) => {
         try {
             const imported = JSON.parse(event.target.result);
             if (Array.isArray(imported)) {
-                if (confirm(`Import ${imported.length} countries? This will merge with existing data.`)) {
+                if (confirm(`Import ${imported.length} countries?`)) {
                     countries = [...countries, ...imported];
                     saveData();
                     updateCountryList();
-                    alert("Import successful!");
                 }
             }
-        } catch (err) { alert("Invalid JSON file!"); }
+        } catch (err) { alert("Invalid JSON!"); }
     };
     reader.readAsText(file);
 };

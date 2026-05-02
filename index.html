@@ -57,10 +57,14 @@
                 </div>
             </div>
         </div>
-        <!-- Floating Button untuk Mobile -->
-        <button id="mobileCreateBtn" class="fab-btn" style="display: none;">
-            <span>+</span> Finish Country
-        </button>
+        <!-- Floating Button Group untuk Mobile -->
+        <div id="mobileControls" class="fab-group" style="display: none;">
+            <button id="undoBtn" class="action-btn-small">Undo</button>
+            <button id="clearBtn" class="action-btn-small danger">Clear</button>
+            <button id="mobileCreateBtn" class="fab-btn">
+                <span>+</span> Finish Country
+            </button>
+        </div>
     </div>
     <script src="app.js"></script>
 </body>
