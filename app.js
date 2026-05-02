@@ -56,15 +56,30 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // Input Handling
+const mobileCreateBtn = document.getElementById('mobileCreateBtn');
+
 canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 0) { // Left Click
+    if (e.button === 0) { // Left Click / Touch
         currentPoints.push({ x: e.clientX, y: e.clientY });
+        updateMobileBtn();
     } else if (e.button === 2) { // Right Click
-        if (currentPoints.length >= 3) {
-            modal.style.display = 'flex';
-        }
+        handleFinish();
     }
 });
+
+function handleFinish() {
+    if (currentPoints.length >= 3) {
+        modal.style.display = 'flex';
+    } else if (currentPoints.length > 0) {
+        alert("Need at least 3 points!");
+    }
+}
+
+function updateMobileBtn() {
+    mobileCreateBtn.style.display = currentPoints.length >= 3 ? 'flex' : 'none';
+}
+
+mobileCreateBtn.onclick = handleFinish;
 
 canvas.addEventListener('mousemove', (e) => {
     mousePos = { x: e.clientX, y: e.clientY };
@@ -91,6 +106,7 @@ document.getElementById('saveBtn').onclick = () => {
 
     saveData();
     currentPoints = [];
+    updateMobileBtn();
     modal.style.display = 'none';
     document.getElementById('countryName').value = '';
     updateCountryList();
@@ -98,6 +114,7 @@ document.getElementById('saveBtn').onclick = () => {
 
 document.getElementById('cancelBtn').onclick = () => {
     currentPoints = [];
+    updateMobileBtn();
     modal.style.display = 'none';
 };
 

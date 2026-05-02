@@ -150,3 +150,44 @@ button {
 .primary:hover { filter: brightness(1.1); transform: translateY(-2px); }
 .secondary { background: #334155; color: white; }
 .secondary:hover { background: #475569; }
+
+/* Floating Action Button for Mobile */
+.fab-btn {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background: var(--accent);
+    color: #0f172a;
+    padding: 16px 28px;
+    border-radius: 50px;
+    font-size: 1rem;
+    font-weight: 800;
+    box-shadow: 0 10px 30px rgba(56, 189, 248, 0.4);
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.fab-btn:active { transform: scale(0.95); }
+
+/* Optimasi Mobile UI */
+@media (max-width: 768px) {
+    .overlay-ui { 
+        flex-direction: column; 
+        gap: 10px; 
+        top: 10px; 
+        left: 10px; 
+        right: 10px; 
+    }
+    .stats-panel { 
+        width: 100%; 
+        max-height: 120px; 
+    }
+    .header h1 { font-size: 1.1rem; }
+    .header p { display: none; } /* Hide desktop instructions on mobile */
+    .modal { width: 95%; padding: 20px; border-radius: 16px; }
+}
