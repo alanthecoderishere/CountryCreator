@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoSandbox Editor - Country Creator</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Canvas Layer -->
+        <canvas id="mapCanvas"></canvas>
+
+        <!-- Overlay UI -->
+        <div class="overlay-ui">
+            <div class="header">
+                <h1>GeoSandbox<span>Editor</span></h1>
+                <p>Left-Click: Add Vertex | Right-Click: Finish Border</p>
+                <div class="header-actions">
+                    <button id="exportBtn" class="action-btn">Export JSON</button>
+                    <button id="importBtn" class="action-btn">Import JSON</button>
+                    <input type="file" id="fileInput" style="display: none;" accept=".json">
+                </div>
+            </div>
+            
+            <div class="stats-panel" id="countryList">
+                <h3>Active Countries</h3>
+                <div class="list-container">
+                    <!-- Country items will be injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Modal -->
+        <div id="countryModal" class="modal-overlay">
+            <div class="modal">
+                <h2>New Country Details</h2>
+                <div class="input-group">
+                    <label>Country Name</label>
+                    <input type="text" id="countryName" placeholder="e.g. United Kingdom">
+                </div>
+                
+                <div class="input-group">
+                    <label>Government Type</label>
+                    <select id="govCategory"></select>
+                </div>
+
+                <div class="input-group">
+                    <label>Leader Rank</label>
+                    <select id="leaderRank"></select>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="cancelBtn" class="secondary">Cancel</button>
+                    <button id="saveBtn" class="primary">Confirm & Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

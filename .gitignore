@@ -1,0 +1,13 @@
+# Java Compiled files
+*.class
+
+# OS Files
+.DS_Store
+
+# Java Source (Optional, jika kamu hanya ingin upload versi Web)
+# BorderTool.java
+# CountryBot.java
+# run.sh
+
+# Data folders
+Data/
